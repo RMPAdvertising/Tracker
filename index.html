@@ -207,9 +207,12 @@ function renderPipeline(records){
     </div>` : "");
 }
 
+const ALL_DOCS = "All documents";
+
 function renderDocTabs(){
   const host = document.getElementById('docTabs');
-  host.innerHTML = docs.map(d=>
+  const tabs = [ALL_DOCS, ...docs];
+  host.innerHTML = tabs.map(d=>
     `<button class="doc-tab ${d===activeDoc?'active':''}" data-doc="${d}">${d}</button>`
   ).join("");
   host.querySelectorAll('.doc-tab').forEach(btn=>{
@@ -232,15 +235,18 @@ function renderFilters(){
 }
 
 function renderTable(){
-  const records = DATA.filter(r=>r.document===activeDoc);
+  const showAll = activeDoc === ALL_DOCS;
+  const records = showAll ? DATA : DATA.filter(r=>r.document===activeDoc);
   const search = document.getElementById('searchBox').value.trim().toLowerCase();
   const statusFilterVal = document.getElementById('statusFilter').value;
 
-  let filtered = records.filter(r=>!search || r.language.toLowerCase().includes(search));
+  let filtered = records.filter(r=>!search || r.language.toLowerCase().includes(search) || (showAll && r.document.toLowerCase().includes(search)));
   if(statusFilterVal){
     filtered = filtered.filter(r=>statusMeta(r.status).label===statusFilterVal);
   }
-  filtered = filtered.slice().sort((a,b)=>a.language.localeCompare(b.language));
+  filtered = filtered.slice().sort((a,b)=> showAll
+    ? (a.document.localeCompare(b.document) || a.language.localeCompare(b.language))
+    : a.language.localeCompare(b.language));
 
   const host = document.getElementById('tableHost');
   if(!filtered.length){
@@ -249,10 +255,10 @@ function renderTable(){
     return;
   }
 
-  let html = `<table><thead><tr><th>Language / version</th><th>Status</th></tr></thead><tbody>`;
+  let html = `<table><thead><tr>${showAll ? '<th>Document</th>' : ''}<th>Language / version</th><th>Status</th></tr></thead><tbody>`;
   filtered.forEach(r=>{
     const meta = statusMeta(r.status);
-    html += `<tr><td class="lang-col">${r.language}</td><td><span class="pill ${meta.cls}"><span class="dot"></span>${meta.label}</span></td></tr>`;
+    html += `<tr>${showAll ? `<td>${r.document}</td>` : ''}<td class="lang-col">${r.language}</td><td><span class="pill ${meta.cls}"><span class="dot"></span>${meta.label}</span></td></tr>`;
   });
   html += `</tbody></table>`;
   host.innerHTML = html;
@@ -261,7 +267,8 @@ function renderTable(){
 
 function renderAll(){
   renderDocTabs();
-  renderPipeline(DATA.filter(r=>r.document===activeDoc));
+  const pipelineRecords = activeDoc === ALL_DOCS ? DATA : DATA.filter(r=>r.document===activeDoc);
+  renderPipeline(pipelineRecords);
   renderFilters();
   renderTable();
 }
