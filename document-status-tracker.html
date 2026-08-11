@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Document status tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1B2430;
+    --ink-soft:#5B6470;
+    --paper:#FAFAF8;
+    --surface:#FFFFFF;
+    --border:#E2E4E2;
+    --border-strong:#CBCFCC;
+    --brand:#2F6F62;
+    --brand-dark:#234F45;
+    --blue:#2E6F9E; --blue-bg:#E7F0F7;
+    --amber:#B67A16; --amber-bg:#FBF0DD;
+    --plum:#7A4B8C; --plum-bg:#F1E7F4;
+    --green:#2F7D5A; --green-bg:#E5F2EB;
+    --gray:#71767E; --gray-bg:#EFEFEE;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px;}
+  header.top{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;margin-bottom:28px;
+  }
+  h1{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:30px;
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .sub{color:var(--ink-soft);font-size:14px;margin:0;}
+  .file-name{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12.5px;color:var(--ink-soft);
+    margin-top:6px;
+  }
+  button{
+    font-family:inherit;font-size:14px;font-weight:500;
+    cursor:pointer;border-radius:8px;
+  }
+  .btn-primary{
+    background:var(--brand);color:#fff;border:1px solid var(--brand);
+    padding:10px 18px;
+  }
+  .btn-primary:hover{background:var(--brand-dark);}
+  .btn-ghost{
+    background:transparent;color:var(--ink);border:1px solid var(--border-strong);
+    padding:9px 16px;
+  }
+  .btn-ghost:hover{background:var(--surface);border-color:var(--ink-soft);}
+  input[type=file]{display:none;}
+
+  /* empty state */
+  .dropzone{
+    margin-top:40px;
+    border:1.5px dashed var(--border-strong);
+    border-radius:14px;
+    padding:64px 24px;
+    text-align:center;
+    background:var(--surface);
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone.drag{border-color:var(--brand);background:var(--green-bg);}
+  .dropzone svg{opacity:.55;margin-bottom:14px;}
+  .dropzone h2{
+    font-family:"Fraunces",serif;font-weight:600;font-size:20px;margin:0 0 6px;
+  }
+  .dropzone p{color:var(--ink-soft);font-size:14px;margin:0 0 20px;}
+
+  /* pipeline overview - signature element */
+  .pipeline{
+    display:flex;border:1px solid var(--border);border-radius:12px;
+    overflow:hidden;margin-bottom:24px;background:var(--surface);
+  }
+  .stage{
+    flex:1;padding:16px 18px;position:relative;
+    border-right:1px solid var(--border);
+  }
+  .stage:last-child{border-right:none;}
+  .stage .count{
+    font-family:"Fraunces",serif;font-weight:600;font-size:26px;line-height:1;
+  }
+  .stage .label{font-size:12.5px;color:var(--ink-soft);margin-top:6px;}
+  .stage::after{
+    content:"";position:absolute;left:0;bottom:0;height:3px;width:100%;
+  }
+  .stage.blue::after{background:var(--blue);}
+  .stage.amber::after{background:var(--amber);}
+  .stage.plum::after{background:var(--plum);}
+  .stage.green::after{background:var(--green);}
+
+  /* filters */
+  .filters{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px;
+  }
+  .filters input[type=text], .filters select{
+    font-family:inherit;font-size:13.5px;
+    border:1px solid var(--border-strong);border-radius:8px;
+    padding:8px 12px;background:var(--surface);color:var(--ink);
+  }
+  .filters input[type=text]{min-width:220px;}
+  .filters .spacer{flex:1;}
+  .filters .count-note{font-size:13px;color:var(--ink-soft);}
+
+  /* table */
+  .table-scroll{
+    border:1px solid var(--border);border-radius:12px;overflow:auto;
+    background:var(--surface);
+  }
+  table{border-collapse:collapse;width:100%;font-size:13.5px;}
+  thead th{
+    position:sticky;top:0;background:var(--surface);
+    text-align:left;padding:12px 14px;font-weight:500;color:var(--ink-soft);
+    border-bottom:1px solid var(--border);white-space:nowrap;font-size:12.5px;
+    text-transform:uppercase;letter-spacing:.03em;
+  }
+  thead th.doc-col{position:sticky;left:0;z-index:2;background:var(--surface);}
+  tbody td{
+    padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;
+  }
+  tbody td.doc-col{
+    position:sticky;left:0;background:var(--surface);
+    font-weight:500;max-width:280px;white-space:normal;
+  }
+  tbody tr:hover td{background:#F6F7F5;}
+  tbody tr:hover td.doc-col{background:#F6F7F5;}
+  tbody tr:last-child td{border-bottom:none;}
+
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 10px;border-radius:99px;font-size:12.5px;font-weight:500;
+    white-space:nowrap;
+  }
+  .pill .dot{width:6px;height:6px;border-radius:50%;flex:none;}
+  .pill.blue{background:var(--blue-bg);color:var(--blue);}
+  .pill.blue .dot{background:var(--blue);}
+  .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.amber .dot{background:var(--amber);}
+  .pill.plum{background:var(--plum-bg);color:var(--plum);}
+  .pill.plum .dot{background:var(--plum);}
+  .pill.green{background:var(--green-bg);color:var(--green);}
+  .pill.green .dot{background:var(--green);}
+  .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .pill.gray .dot{background:var(--gray);}
+  .lang-tag{
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-soft);
+  }
+  .empty-cell{color:var(--border-strong);}
+
+  /* mapping panel */
+  .mapping{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:24px;margin-top:24px;max-width:520px;
+  }
+  .mapping h2{font-family:"Fraunces",serif;font-size:18px;margin:0 0 4px;}
+  .mapping p{color:var(--ink-soft);font-size:13.5px;margin:0 0 18px;}
+  .map-row{margin-bottom:14px;}
+  .map-row label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:5px;}
+  .map-row select{
+    width:100%;font-family:inherit;font-size:14px;padding:9px 10px;
+    border:1px solid var(--border-strong);border-radius:8px;background:var(--paper);
+  }
+  .error-note{
+    background:var(--amber-bg);color:var(--amber);border-radius:8px;
+    padding:10px 12px;font-size:13px;margin-bottom:16px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Document status tracker</h1>
+      <p class="sub">Creation, review, amendment and approval status across every language version</p>
+      <div class="file-name" id="fileName"></div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-ghost" id="replaceBtn" style="display:none;">Replace file</button>
+      <button class="btn-primary" id="uploadBtn">Upload Excel file</button>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  </header>
+
+  <div id="emptyState" class="dropzone">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#5B6470" stroke-width="1.5"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+    <h2>No data loaded yet</h2>
+    <p>Drop your Excel file here, or click below. Expected columns: document,<br>language and status &mdash; column names don't need to match exactly.</p>
+    <button class="btn-primary" id="emptyUploadBtn">Choose Excel file</button>
+  </div>
+
+  <div id="mappingPanel" style="display:none;"></div>
+
+  <div id="dashboard" style="display:none;">
+    <div class="pipeline" id="pipeline"></div>
+    <div class="filters">
+      <input type="text" id="searchBox" placeholder="Search documents…">
+      <select id="statusFilter"></select>
+      <select id="langFilter"></select>
+      <div class="spacer"></div>
+      <span class="count-note" id="countNote"></span>
+    </div>
+    <div class="table-scroll"><div id="tableHost"></div></div>
+  </div>
+
+</div>
+
+<script>
+const STATUSES = [
+  {label:"Being created by RMP", cls:"blue"},
+  {label:"To be reviewed", cls:"amber"},
+  {label:"Being amended by RMP", cls:"plum"},
+  {label:"Approved", cls:"green"}
+];
+function statusMeta(raw){
+  const norm = (raw||"").toString().trim().toLowerCase();
+  for(const s of STATUSES){ if(s.label.toLowerCase()===norm) return s; }
+  for(const s of STATUSES){ if(norm.includes(s.label.toLowerCase().split(" ")[0])) {} }
+  if(norm.includes("creat")) return STATUSES[0];
+  if(norm.includes("review")) return STATUSES[1];
+  if(norm.includes("amend")) return STATUSES[2];
+  if(norm.includes("approv")) return STATUSES[3];
+  return {label: raw||"Unknown", cls:"gray"};
+}
+
+let state = { records: [], fileName: "" };
+
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const emptyUploadBtn = document.getElementById('emptyUploadBtn');
+const replaceBtn = document.getElementById('replaceBtn');
+const emptyState = document.getElementById('emptyState');
+const mappingPanel = document.getElementById('mappingPanel');
+const dashboard = document.getElementById('dashboard');
+const fileNameEl = document.getElementById('fileName');
+
+[uploadBtn, emptyUploadBtn, replaceBtn].forEach(b=>b.addEventListener('click', ()=>fileInput.click()));
+
+emptyState.addEventListener('dragover', e=>{e.preventDefault(); emptyState.classList.add('drag');});
+emptyState.addEventListener('dragleave', ()=>emptyState.classList.remove('drag'));
+emptyState.addEventListener('drop', e=>{
+  e.preventDefault(); emptyState.classList.remove('drag');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+  fileInput.value = "";
+});
+
+function handleFile(file){
+  state.fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const wb = XLSX.read(ev.target.result, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:""});
+    if(!rows.length){ alert("That sheet looks empty."); return; }
+    const headers = rows[0].map(h=>(h||"").toString().trim());
+    const body = rows.slice(1).filter(r=>r.some(c=>(c||"").toString().trim()!==""));
+    tryAutoMap(headers, body);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function guessCol(headers, patterns, exclude){
+  for(let i=0;i<headers.length;i++){
+    const h = headers[i].toLowerCase();
+    if(exclude && exclude.includes(i)) continue;
+    if(patterns.some(p=>h.includes(p))) return i;
+  }
+  return -1;
+}
+
+function tryAutoMap(headers, body){
+  const statusIdx = guessCol(headers, ["status"]);
+  const langIdx = guessCol(headers, ["language","lang"], [statusIdx]);
+  const docIdx = guessCol(headers, ["document","title","name","file"], [statusIdx, langIdx]);
+  if(statusIdx>=0 && langIdx>=0 && docIdx>=0){
+    buildRecords(headers, body, docIdx, langIdx, statusIdx);
+  } else {
+    showMapping(headers, body, {docIdx, langIdx, statusIdx});
+  }
+}
+
+function showMapping(headers, body, guess){
+  dashboard.style.display = 'none';
+  emptyState.style.display = 'none';
+  mappingPanel.style.display = 'block';
+  const opts = headers.map((h,i)=>`<option value="${i}">${h||"(column "+(i+1)+")"}</option>`).join("");
+  mappingPanel.innerHTML = `
+    <div class="mapping">
+      <h2>Match your columns</h2>
+      <p>We couldn't auto-detect every column. Tell us which is which.</p>
+      <div class="error-note">Sheet has ${headers.length} columns and ${body.length} rows.</div>
+      <div class="map-row"><label>Document column</label>
+        <select id="mapDoc">${opts}</select></div>
+      <div class="map-row"><label>Language column</label>
+        <select id="mapLang">${opts}</select></div>
+      <div class="map-row"><label>Status column</label>
+        <select id="mapStatus">${opts}</select></div>
+      <button class="btn-primary" id="confirmMap">Build dashboard</button>
+    </div>
+  `;
+  if(guess.docIdx>=0) document.getElementById('mapDoc').value = guess.docIdx;
+  if(guess.langIdx>=0) document.getElementById('mapLang').value = guess.langIdx;
+  if(guess.statusIdx>=0) document.getElementById('mapStatus').value = guess.statusIdx;
+  document.getElementById('confirmMap').addEventListener('click', ()=>{
+    const d = parseInt(document.getElementById('mapDoc').value);
+    const l = parseInt(document.getElementById('mapLang').value);
+    const s = parseInt(document.getElementById('mapStatus').value);
+    buildRecords(headers, body, d, l, s);
+  });
+}
+
+function buildRecords(headers, body, docIdx, langIdx, statusIdx){
+  const records = body.map(r=>({
+    document: (r[docIdx]||"").toString().trim(),
+    language: (r[langIdx]||"").toString().trim(),
+    status: (r[statusIdx]||"").toString().trim()
+  })).filter(r=>r.document);
+  state.records = records;
+  mappingPanel.style.display = 'none';
+  saveData();
+  render();
+}
+
+async function saveData(){
+  try{
+    await window.storage.set('documents-data', JSON.stringify({records: state.records, fileName: state.fileName}), false);
+  }catch(err){ console.error('Storage save failed', err); }
+}
+
+async function loadData(){
+  try{
+    const res = await window.storage.get('documents-data', false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      state.records = parsed.records || [];
+      state.fileName = parsed.fileName || "";
+      if(state.records.length){ render(); return; }
+    }
+  }catch(err){ /* no data yet */ }
+  emptyState.style.display = 'block';
+}
+
+function render(){
+  if(!state.records.length){ emptyState.style.display='block'; dashboard.style.display='none'; return; }
+  emptyState.style.display = 'none';
+  mappingPanel.style.display = 'none';
+  dashboard.style.display = 'block';
+  replaceBtn.style.display = 'inline-block';
+  fileNameEl.textContent = state.fileName ? ("Loaded from " + state.fileName) : "";
+
+  const docs = [...new Set(state.records.map(r=>r.document))].sort((a,b)=>a.localeCompare(b));
+  const langs = [...new Set(state.records.map(r=>r.language).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+
+  const cellMap = {};
+  state.records.forEach(r=>{ cellMap[r.document+"||"+r.language] = r.status; });
+
+  renderPipeline();
+  renderFilters(langs);
+  renderTable(docs, langs, cellMap);
+
+  document.getElementById('searchBox').oninput = ()=>renderTable(docs, langs, cellMap);
+  document.getElementById('statusFilter').onchange = ()=>renderTable(docs, langs, cellMap);
+  document.getElementById('langFilter').onchange = ()=>renderTable(docs, langs, cellMap);
+}
+
+function renderPipeline(){
+  const counts = {blue:0, amber:0, plum:0, green:0, gray:0};
+  state.records.forEach(r=>{ counts[statusMeta(r.status).cls]++; });
+  const pipeline = document.getElementById('pipeline');
+  pipeline.innerHTML = STATUSES.map(s=>`
+    <div class="stage ${s.cls}">
+      <div class="count">${counts[s.cls]}</div>
+      <div class="label">${s.label}</div>
+    </div>
+  `).join("") + (counts.gray ? `
+    <div class="stage" style="border-right:none;">
+      <div class="count">${counts.gray}</div>
+      <div class="label">Other status</div>
+    </div>` : "");
+}
+
+function renderFilters(langs){
+  const statusSel = document.getElementById('statusFilter');
+  statusSel.innerHTML = `<option value="">All statuses</option>` +
+    STATUSES.map(s=>`<option value="${s.label}">${s.label}</option>`).join("");
+  const langSel = document.getElementById('langFilter');
+  langSel.innerHTML = `<option value="">All languages</option>` +
+    langs.map(l=>`<option value="${l}">${l}</option>`).join("");
+}
+
+function renderTable(docs, allLangs, cellMap){
+  const search = document.getElementById('searchBox').value.trim().toLowerCase();
+  const statusFilterVal = document.getElementById('statusFilter').value;
+  const langFilterVal = document.getElementById('langFilter').value;
+
+  const langs = langFilterVal ? [langFilterVal] : allLangs;
+
+  let filteredDocs = docs.filter(d=>!search || d.toLowerCase().includes(search));
+  if(statusFilterVal){
+    filteredDocs = filteredDocs.filter(d=>
+      langs.some(l=>{
+        const st = cellMap[d+"||"+l];
+        return st && statusMeta(st).label === statusFilterVal;
+      })
+    );
+  }
+
+  const host = document.getElementById('tableHost');
+  if(!filteredDocs.length){
+    host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--ink-soft);">No documents match these filters.</div>`;
+    document.getElementById('countNote').textContent = "0 documents";
+    return;
+  }
+
+  let html = `<table><thead><tr><th class="doc-col">Document</th>`;
+  langs.forEach(l=> html += `<th><span class="lang-tag">${l}</span></th>`);
+  html += `</tr></thead><tbody>`;
+  filteredDocs.forEach(d=>{
+    html += `<tr><td class="doc-col">${d}</td>`;
+    langs.forEach(l=>{
+      const st = cellMap[d+"||"+l];
+      if(!st){ html += `<td class="empty-cell">&mdash;</td>`; return; }
+      const meta = statusMeta(st);
+      html += `<td><span class="pill ${meta.cls}"><span class="dot"></span>${meta.label}</span></td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  host.innerHTML = html;
+  document.getElementById('countNote').textContent = `${filteredDocs.length} of ${docs.length} documents · ${langs.length} language${langs.length===1?"":"s"} shown`;
+}
+
+loadData();
+</script>
+</body>
+</html>
